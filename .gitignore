@@ -1,3 +1,5 @@
 *.tsv
 *.jsonl
 model
+*.out
+*.pyc
