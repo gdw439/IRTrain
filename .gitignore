@@ -3,5 +3,7 @@
 model
 *.out
 *.pyc
+*.xlsx
+*.log
 history
 models
