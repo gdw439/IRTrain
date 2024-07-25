@@ -49,7 +49,7 @@ class MyTrainer(Trainer):
         q_num = inputs[-1]
         name = inputs[0]
         inputs = inputs[1:-1]
-        in_batch_loss, pair_loss = torch.tensor(0.0), torch.tensor(0.0)
+        in_batch_loss, pair_loss, ewc_loss = torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         if "in_batch" in name:
             if model_name in ["e5", "piccolo"]:
                 vectors = [get_vecs_e5(ipt) for ipt in inputs]
@@ -85,22 +85,7 @@ class MyTrainer(Trainer):
                 cosent_ratio=cosent_ratio,
                 zero_data=torch.tensor([0.0]).to(vectors.device)
             )
-        # Step3 计算 ewc loss
-        losses = []
-        for n, p in model.named_parameters():
-            # 每个参数都有mean和fisher
-            mean = original_weight[n.replace("module.", "")]
-            if "position_embeddings.weight" in n:
-                print(p.shape, mean.shape)
-                losses.append(
-                    ((p - mean)[:512, :] ** 2).sum()
-                )
-            else:
-                losses.append(
-                    ((p - mean) ** 2).sum()
-                )
-        ewc_loss = sum(losses)
-
+        
         final_loss = in_batch_loss + pair_loss
         if "ewc" in train_method:
             final_loss += (ewc_loss * ewc_ratio)
@@ -230,7 +215,7 @@ if __name__ == "__main__":
     )
     model.to(device)
 
-    original_weight = get_mean_params(model)
+    # original_weight = get_mean_params(model)
 
     tokenizer = MODEL_NAME_INFO[model_name][1].from_pretrained(model_dir, trust_remote_code=True)
     if grad_checkpoint:
