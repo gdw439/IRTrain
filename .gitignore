@@ -7,3 +7,7 @@ model
 *.log
 history
 models
+*.npy
+*.pt
+result
+tools/bm25_retriever/index

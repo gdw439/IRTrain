@@ -14,7 +14,7 @@ class ModelEmbed(object):
         self.device = self.model.device
         self.batch_size = batch_size
 
-    def emdbed(self, text: List[str], max_length: int = 512) -> torch.Tensor :
+    def emdbed(self, text: List[str], max_length: int = 1024) -> torch.Tensor :
         if isinstance(text, str): text = [text]
         
         vector_buff = []
@@ -48,8 +48,8 @@ class BruteIndex(object):
         self.text.extend(text)
         self.index.append(embed)
     
-
-    def search(self, embed: torch.Tensor, topn: int = 5, step: int = 2560):
+    @torch.no_grad()
+    def search(self, embed: torch.Tensor, topn: int = 5, step: int = 256):
         self.index = self.index if isinstance(self.index, torch.Tensor) else torch.vstack(self.index)
 
         embed.to(self.device)
@@ -127,7 +127,35 @@ def load_tsv(file_path):
 
     # ans = index.search(embed.emdbed(["本人大一新生"]))
     # print(ans)
-        
+
+
+def chunks(datain):
+    import re
+    pattern = re.compile(r'([^。！？]*[。！？]|[^。！？]+$)')
+
+    spans = []
+    spans2idx = {}
+    # 使用findall方法找到所有匹配的文本段
+    for idx, text in enumerate(datain):
+        ans = list(pattern.findall(text))
+
+        tmp = ''
+        chk = []
+        for an in ans:
+            if len(tmp + an) >= 512:
+                chk.append(tmp)
+                tmp = ''
+            tmp += an
+        if tmp != "":
+            chk.append(tmp)
+
+        ans = tmp
+        spans.extend(ans)
+        for an in ans:
+            spans2idx[an] = spans2idx.get(an, set())
+            spans2idx[an].add(idx)
+    return spans, spans2idx
+
 
 if __name__ == '__main__':
     import argparse
@@ -152,8 +180,10 @@ if __name__ == '__main__':
         from collections import OrderedDict
         corpus = list(OrderedDict.fromkeys(corpus))
 
-    corpus_emb = encoder.emdbed(corpus)
-    index.insert(corpus, corpus_emb)
+    span, tabs = chunks(corpus)
+
+    corpus_emb = encoder.emdbed(span)
+    index.insert(span, corpus_emb)
 
     qs = [q for q, _ in qd_pair.items()]
     cnt, batch = 0, 256
@@ -165,12 +195,20 @@ if __name__ == '__main__':
     for p in range(0, len(qs), batch):
         qb = qs[p: p+batch]
         qb_emb = encoder.emdbed(qb)
-        score, value = index.search(qb_emb)
+        score, value = index.search(qb_emb, topn=30)
+        
+        corpus_2_score = {}
+        for s, val in zip(score, value):
+            corpus_2_score[corpus[tabs[val]]] = max(corpus_2_score[corpus[tabs[val]]], s)
+        topn = sorted(list(corpus_2_score), key=lambda x:x[1])
+        topn = [i[0] for i in topn[-5:]] 
+        
         for q, ca in zip(qb, value):
             qr = qd_pair[q] 
             # print([q, qr, qr & set(ca)] + ca)
             # print()
-            cnt = cnt + 1 if qr & set(ca) else cnt
-            ws.append( [q, '\n\n'.join(list(qr)), True if qr & set(ca) else False] + ca )
-wb.save("topn.xlsx")
-print(f'recall is {cnt / len(qs) :.2%}')
+            cnt = cnt + 1 if qr & set(topn) else cnt
+            ws.append( [q, '\n\n'.join(list(qr)), True if qr & set(ca) else False] + topn)
+    wb.save("topn.xlsx")
+    print(f'recall is {cnt / len(qs) :.2%}')
+
