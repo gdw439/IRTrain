@@ -20,7 +20,23 @@ class ModelEmbed(nn.Module):
         vectors = torch.nn.functional.normalize(vectors, 2.0, dim=1)
         return vectors
 
-model = ModelEmbed('/home/guodewen/research/IRTrain/models/stella_v2_large')
+
+class BGEEmbed(nn.Module):
+    ''' 使用模型将文本表征为向量
+    '''
+    def __init__(self, path) -> None:
+        super(BGEEmbed, self).__init__()
+        self.model = BertModel.from_pretrained(path, trust_remote_code=True)
+
+    def forward(self, **prein):
+        model_output = self.model(**prein)
+        vectors = model_output[0][:, 0]
+        vectors = torch.nn.functional.normalize(vectors, 2.0, dim=1)
+        return vectors
+
+
+# model = ModelEmbed('/home/guodewen/research/IRTrain/models/stella_v2_large')
+model = BGEEmbed('/home/guodewen/research/IRTrain/models/bge-large-en-v1.5')
 if torch.cuda.device_count() > 1:
     print(f"Let's use {torch.cuda.device_count()} GPUs!")
     model = nn.DataParallel(model)
@@ -39,7 +55,7 @@ for key, val in text_tab.items():
     md5_list.append(key)
     txt_list.append(val)
 
-batch = 1024 * 2 * 8
+batch = 1024 * 2 * 6
 
 print(md5_list[:8])
 print(txt_list[:8])
@@ -47,6 +63,7 @@ print(txt_list[:8])
 tokenizer = AutoTokenizer.from_pretrained('/home/guodewen/research/IRTrain/models/stella_v2_large', trust_remote_code=True)
 with torch.no_grad():
     for pos in tqdm(range(0, len(text_tab), batch), desc="embedding process"):
+        # if pos <= 5615616:continue
         prein = tokenizer.batch_encode_plus(
             txt_list[pos: pos + batch], 
             padding="longest", 
@@ -63,4 +80,4 @@ np.save('md5-3.npy', md5_list)
 
 import torch
 emb_torch = torch.vstack(emb_list)
-torch.save(emb_torch, 'emb-3.pt')
+torch.save(emb_torch, 'embed-3.pt')

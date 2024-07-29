@@ -34,9 +34,28 @@ class ModelEmbed(object):
                 last_hidden = model_output.last_hidden_state.masked_fill(~attention_mask[..., None].bool(), 0.0)
                 vectors = last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
                 vectors = torch.nn.functional.normalize(vectors, 2.0, dim=1)
-            vector_buff.append(vectors)
+            vector_buff.append(vectors.to('cpu'))
         vectors = torch.vstack(vector_buff)
-        return vectors
+        return vectors.to('cuda')
+
+
+from FlagEmbedding import BGEM3FlagModel
+
+class BGEM3(object):
+    ''' 使用模型将文本表征为向量
+    '''
+    def __init__(self, path, device='cuda', batch_size = 256) -> None:
+        self.token = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
+        self.model = BGEM3FlagModel(path, use_fp16=True)
+        self.device = self.model.device
+        self.batch_size = batch_size
+
+    def emdbed(self, text: List[str], max_length: int = 1024) -> torch.Tensor :
+        print(text[:5])
+        text = ['..' if item == '' else item for item in text]
+        print(len(text))
+        vectors = self.model.encode(text, batch_size=self.batch_size, max_length=8192)['dense_vecs']
+        return torch.tensor(vectors)
 
 
 class BruteIndex(object):
@@ -50,7 +69,15 @@ class BruteIndex(object):
     
     @torch.no_grad()
     def search(self, embed: torch.Tensor, topn: int = 5, step: int = 256):
-        self.index = self.index if isinstance(self.index, torch.Tensor) else torch.vstack(self.index)
+        if isinstance(self.index, torch.Tensor) :
+            self.index = self.index 
+        else:
+            # for item in self.index:
+            #     item = item.to('cpu')
+            self.index = self.index[0]
+            print(self.index.shape)
+            
+            # torch.vstack(self.index)
 
         embed.to(self.device)
         self.index.to(self.device)
@@ -137,23 +164,26 @@ def chunks(datain):
     spans2idx = {}
     # 使用findall方法找到所有匹配的文本段
     for idx, text in enumerate(datain):
-        ans = list(pattern.findall(text))
+        spans2idx[text] = spans2idx.get(text, set())
+        spans2idx[text].add(idx)
+        spans.append(text)
+        # ans = list(pattern.findall(text))
 
-        tmp = ''
-        chk = []
-        for an in ans:
-            if len(tmp + an) >= 512:
-                chk.append(tmp)
-                tmp = ''
-            tmp += an
-        if tmp != "":
-            chk.append(tmp)
+        # tmp = ''
+        # chk = []
+        # for an in ans:
+        #     if len(tmp + an) >= 512:
+        #         chk.append(tmp)
+        #         tmp = ''
+        #     tmp += an
+        # if tmp != "":
+        #     chk.append(tmp)
 
-        ans = tmp
-        spans.extend(ans)
-        for an in ans:
-            spans2idx[an] = spans2idx.get(an, set())
-            spans2idx[an].add(idx)
+        # ans = chk
+        # spans.extend(ans)
+        # for an in ans:
+        #     spans2idx[an] = spans2idx.get(an, set())
+        #     spans2idx[an].add(idx)
     return spans, spans2idx
 
 
@@ -165,7 +195,8 @@ if __name__ == '__main__':
     args.add_argument('-c', type=str, required=True, help='corpus file')
     args = args.parse_args()
 
-    encoder = ModelEmbed(args.m, device='cuda', batch_size=512)
+    # encoder = ModelEmbed(args.m, device='cuda', batch_size=512)
+    encoder = BGEM3(args.m, device='cuda', batch_size=16)
     index = BruteIndex(device='cuda')
 
     qd_pair = {}
@@ -181,12 +212,13 @@ if __name__ == '__main__':
         corpus = list(OrderedDict.fromkeys(corpus))
 
     span, tabs = chunks(corpus)
-
+    print(span[:5])
     corpus_emb = encoder.emdbed(span)
+    print("corpus_emb.shape: ", corpus_emb.shape)
     index.insert(span, corpus_emb)
 
     qs = [q for q, _ in qd_pair.items()]
-    cnt, batch = 0, 256
+    cnt, batch = 0, 512
 
     import openpyxl
     wb = openpyxl.Workbook()
@@ -194,21 +226,22 @@ if __name__ == '__main__':
     ws.append(['query', 'content', 'label'] + [f'top{i}' for i in range(5)])
     for p in range(0, len(qs), batch):
         qb = qs[p: p+batch]
+        if len(qb) == 0: continue
         qb_emb = encoder.emdbed(qb)
         score, value = index.search(qb_emb, topn=30)
         
-        corpus_2_score = {}
-        for s, val in zip(score, value):
-            corpus_2_score[corpus[tabs[val]]] = max(corpus_2_score[corpus[tabs[val]]], s)
-        topn = sorted(list(corpus_2_score), key=lambda x:x[1])
-        topn = [i[0] for i in topn[-5:]] 
-        
-        for q, ca in zip(qb, value):
-            qr = qd_pair[q] 
-            # print([q, qr, qr & set(ca)] + ca)
-            # print()
-            cnt = cnt + 1 if qr & set(topn) else cnt
-            ws.append( [q, '\n\n'.join(list(qr)), True if qr & set(ca) else False] + topn)
-    wb.save("topn.xlsx")
-    print(f'recall is {cnt / len(qs) :.2%}')
+        for q, sc, ca in zip(qb, score, value):
+            qr = qd_pair[q]
 
+            corpus_2_score = {}
+            for s, c in zip(sc, ca):
+                for cid in tabs[c]:
+                    corpus_2_score[corpus[cid]] = max(corpus_2_score.get(corpus[cid], 0), s)
+            topn = sorted(list(corpus_2_score.items()), key=lambda x:x[1])
+            topn = [i[0] for i in topn[-5:]] 
+
+            cnt = cnt + 1 if len(qr & set(topn)) > 0 else cnt
+            ws.append( [q, '\n\n'.join(list(qr)), len(qr & set(topn))] + topn)
+    wb.save("topn.xlsx")
+
+    print(f'recall {cnt} / {len(qs)} is {cnt / len(qs) :.2%}')
