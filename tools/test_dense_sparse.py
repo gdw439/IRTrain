@@ -20,7 +20,7 @@
 # If false, use random numbers to compose dense and sparse vectors.
 use_bge_m3 = True
 # If true, the search result will be reranked using BGE CrossEncoder model.
-use_reranker = True
+use_reranker = False
 
 # The overall steps are as follows:
 # 1. embed the text as dense and sparse vectors
@@ -62,7 +62,7 @@ if use_bge_m3:
     # It is included in the optional `model` module in pymilvus, to install it,
     # simply run "pip install pymilvus[model]".
     from pymilvus.model.hybrid import BGEM3EmbeddingFunction
-    ef = BGEM3EmbeddingFunction(use_fp16=False, device="cpu")
+    ef = BGEM3EmbeddingFunction(model_name = '/Users/dwguo/Downloads/bge-m3', use_fp16=False, device="mps")
     dense_dim = ef.dim["dense"]
 
 docs_embeddings = ef(docs)
