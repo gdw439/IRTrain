@@ -11,3 +11,4 @@ models
 *.pt
 result
 tools/bm25_retriever/index
+logs

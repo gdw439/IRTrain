@@ -46,7 +46,7 @@ class BGEM3(object):
     '''
     def __init__(self, path, device='cuda', batch_size = 256) -> None:
         self.token = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
-        self.model = BGEM3FlagModel(path, use_fp16=True)
+        self.model = BGEM3FlagModel(path, use_fp16=True, device=device)
         self.device = self.model.device
         self.batch_size = batch_size
 
@@ -193,6 +193,7 @@ if __name__ == '__main__':
     args.add_argument('-m', type=str, required=True, help='model path')
     args.add_argument('-q', type=str, required=True, help='query file with answer phase')
     args.add_argument('-c', type=str, required=True, help='corpus file')
+    args.add_argument('-t', type=int, required=True, help='topn recall')
     args = args.parse_args()
 
     # encoder = ModelEmbed(args.m, device='cuda', batch_size=512)
@@ -201,15 +202,23 @@ if __name__ == '__main__':
 
     qd_pair = {}
     import jsonlines
+    # with jsonlines.open(args.q, 'r') as f:
+    #     for i in f:
+    #         qd_pair[i['query']] = qd_pair.get(i['query'], set())
+    #         qd_pair[i['query']].add(i['content'])
     with jsonlines.open(args.q, 'r') as f:
         for i in f:
-            qd_pair[i['query']] = qd_pair.get(i['query'], set())
-            qd_pair[i['query']].add(i['content'])
+            if i['question_type'] != '事实性问题': continue
+            qd_pair[i['question']] = qd_pair.get(i['question'], set())
+            qd_pair[i['question']].add(i['article'].replace('\n', ''))
 
     with jsonlines.open(args.c, 'r') as f:
         corpus = [i['content'].replace("\n", "").strip() for i in f]
         from collections import OrderedDict
         corpus = list(OrderedDict.fromkeys(corpus))
+
+    # 确保召回的文档确实在index中
+    corpus = list(set(corpus) | set([cor for corpus in qd_pair.values() for cor in corpus]))
 
     span, tabs = chunks(corpus)
     print(span[:5])
@@ -223,12 +232,12 @@ if __name__ == '__main__':
     import openpyxl
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.append(['query', 'content', 'label'] + [f'top{i}' for i in range(5)])
+    ws.append(['query', 'content', 'label'] + [f'top{i}' for i in range(args.t)])
     for p in range(0, len(qs), batch):
         qb = qs[p: p+batch]
         if len(qb) == 0: continue
         qb_emb = encoder.emdbed(qb)
-        score, value = index.search(qb_emb, topn=30)
+        score, value = index.search(qb_emb, topn=args.t)
         
         for q, sc, ca in zip(qb, score, value):
             qr = qd_pair[q]
@@ -238,7 +247,7 @@ if __name__ == '__main__':
                 for cid in tabs[c]:
                     corpus_2_score[corpus[cid]] = max(corpus_2_score.get(corpus[cid], 0), s)
             topn = sorted(list(corpus_2_score.items()), key=lambda x:x[1])
-            topn = [i[0] for i in topn[-5:]] 
+            topn = [i[0] for i in topn[-args.t:]] 
 
             cnt = cnt + 1 if len(qr & set(topn)) > 0 else cnt
             ws.append( [q, '\n\n'.join(list(qr)), len(qr & set(topn))] + topn)
