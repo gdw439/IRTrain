@@ -12,3 +12,4 @@ models
 result
 tools/bm25_retriever/index
 logs
+*.npz
