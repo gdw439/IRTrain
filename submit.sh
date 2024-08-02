@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --partition=rag
-#SBATCH --nodelist=g3018
+#SBATCH --nodelist=g1003
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:3
-#SBATCH --cpus-per-task=3
+#SBATCH --gres=gpu:8
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
 nvidia-smi
 free -h
@@ -46,3 +46,6 @@ set -x
 # python ./tools/dump_text_emb.py
 # python ./tools/dump_text_emb_dpc.py
 # python ./tools/clean_inbatch_data.py
+CUDA_VISIBLE_DEVICES=7
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+python ./tools/test-bge-m3.py

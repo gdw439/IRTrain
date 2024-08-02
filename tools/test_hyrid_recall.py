@@ -116,7 +116,8 @@ if __name__ == '__main__':
         from collections import OrderedDict
         corpus = list(OrderedDict.fromkeys(corpus))
 
-    corpus = list(set(corpus) | set([cor for corpus in qd_pair.values() for cor in corpus]))
+    # corpus = list(set(corpus) | set([cor for corpus in qd_pair.values() for cor in corpus]))
+    
     corpus = [cor for cor in corpus if cor != '']
 
     index.insert(corpus)

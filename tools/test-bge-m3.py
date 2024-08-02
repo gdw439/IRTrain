@@ -1,24 +1,54 @@
-from FlagEmbedding import BGEM3FlagModel
+import logging
 
-model = BGEM3FlagModel('/home/guodewen/research/IRTrain/models/bge-m3/',  use_fp16=True) # Setting use_fp16 to True speeds up computation with a slight performance degradation
+# 配置日志记录
+logging.basicConfig(
+    level=logging.INFO,  # 设置日志级别为 DEBUG（包括 DEBUG 以上的所有日志）
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # 日志格式
+    datefmt='%Y-%m-%d %H:%M:%S',  # 日期时间格式
+    handlers=[logging.StreamHandler()]
+)
 
-sentences_1 = ["What is BGE M3?", "Defination of BM25"]
-sentences_2 = ["BGE M3 is an embedding model supporting dense retrieval, lexical matching and multi-vector interaction.", 
-               "BM25 is a bag-of-words retrieval function that ranks a set of documents based on the query terms appearing in each document"]
+model_name = '/home/guodewen/research/IRTrain/models/bge-m3'
+from pymilvus.model.hybrid import BGEM3EmbeddingFunction
+func = BGEM3EmbeddingFunction(model_name=model_name, use_fp16=True, device="cuda")
+from scipy.sparse import csr_matrix, vstack, save_npz, load_npz
+import jsonlines
+import numpy as np
 
-output_1 = model.encode(sentences_1, return_dense=True, return_sparse=True, return_colbert_vecs=False)
-output_2 = model.encode(sentences_2, return_dense=True, return_sparse=True, return_colbert_vecs=False)
+with jsonlines.open('/home/guodewen/research/IRTrain/dataset/soda_stella/bge_large_0_0.jsonl', 'r') as f:
+    corpus = [i['content'].replace("\n", "").strip() for i in f]
+    from collections import OrderedDict
+    corpus = list(OrderedDict.fromkeys(corpus))
 
-# you can see the weight for each token:
-print(model.convert_id_to_token(output_1['lexical_weights']))
-# [{'What': 0.08356, 'is': 0.0814, 'B': 0.1296, 'GE': 0.252, 'M': 0.1702, '3': 0.2695, '?': 0.04092}, 
-#  {'De': 0.05005, 'fin': 0.1368, 'ation': 0.04498, 'of': 0.0633, 'BM': 0.2515, '25': 0.3335}]
+corpus = [cor for cor in corpus if cor != '']
+
+# dense_data, sparse_data = [], []
+# batch = 102
+# for p in range(0, len(corpus), batch):
+#     indata = corpus[p: p + batch]
+#     ans = func(indata)
+#     dense_data.append(ans['dense'])
+#     sparse_data.append(ans['sparse'])
+
+# dense_data = np.vstack(dense_data)
+# sparse_data = vstack(sparse_data)
+ans = func(corpus)
+dense_data = ans['dense']
+sparse_data = ans['sparse']
+np.save('corpus.dense', dense_data)
+save_npz('corpus.sparse', sparse_data)
 
 
-# compute the scores via lexical mathcing
-lexical_scores = model.compute_lexical_matching_score(output_1['lexical_weights'][0], output_2['lexical_weights'][0])
-print(lexical_scores)
-# 0.19554901123046875
+qd_pair = {}
+import jsonlines
+with jsonlines.open('/home/guodewen/research/IRTrain/dataset/soda_stella/test.jsonl', 'r') as f:
+    for i in f:
+        qd_pair[i['query']] = qd_pair.get(i['query'], set())
+        qd_pair[i['query']].add(i['content'])
+qs = [q for q, _ in qd_pair.items()]
+ans = func(qs)
+dense_data = ans['dense']
+sparse_data = ans['sparse']
 
-print(model.compute_lexical_matching_score(output_1['lexical_weights'][0], output_1['lexical_weights'][1]))
-# 0.0
+np.save('query.dense', dense_data)
+save_npz('query.sparse', sparse_data)
