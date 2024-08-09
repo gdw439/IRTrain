@@ -50,43 +50,10 @@ set -x
 # export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # python ./tools/test-bge-m3.py
 
-# for topk in 5 10 15 20 25
-# do
-#     python ./tools/test_bm25_recall.py \
-#         -q /home/guodewen/research/IRTrain/dataset/IR-TEST/govern/govern-test-uniq.jsonl \
-#         -c /home/guodewen/research/IRTrain/dataset/IR-TEST/govern/govern-content-uniq.jsonl \
-#         -t $topk
-# done
-
-
 for topk in 5 10 15 20 25
 do
-    python ./tools/index.py \
-        -m /home/guodewen/research/IRTrain/models/bge-m3 \
-        -q /home/guodewen/research/IRTrain/dataset/IR-TEST/aviation/test-uniq.jsonl \
-        -c /home/guodewen/research/IRTrain/dataset/IR-TEST/aviation/content-uniq.jsonl \
-        -t $topk \
-        -s /home/guodewen/research/IRTrain/result/bgem3/aviation
-done
-
-
-for topk in 5 10 15 20 25
-do
-    python ./tools/index.py \
-        -m /home/guodewen/research/IRTrain/models/bge-m3 \
-        -q /home/guodewen/research/IRTrain/dataset/IR-TEST/govern/govern-test-uniq.jsonl \
-        -c /home/guodewen/research/IRTrain/dataset/IR-TEST/govern/govern-content-uniq.jsonl \
-        -t $topk \
-        -s /home/guodewen/research/IRTrain/result/bgem3/govern 
-done
-
-
-for topk in 5 10 15 20 25
-do
-    python ./tools/index.py \
-        -m /home/guodewen/research/IRTrain/models/bge-m3 \
+    python ./tools/test_bm25_recall.py \
         -q /home/guodewen/research/IRTrain/dataset/IR-TEST/kuake/kuake-med-test-uniq.jsonl \
         -c /home/guodewen/research/IRTrain/dataset/IR-TEST/kuake/kuake-med-content-uniq.jsonl \
-        -t $topk \
-        -s /home/guodewen/research/IRTrain/result/bgem3/kuake
+        -t $topk
 done

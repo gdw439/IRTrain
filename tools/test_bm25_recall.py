@@ -11,16 +11,10 @@ index = BM25Index()
 
 qd_pair = {}
 import jsonlines
-# with jsonlines.open(args.q, 'r') as f:
-#     for i in f:
-#         qd_pair[i['query']] = qd_pair.get(i['query'], set())
-#         qd_pair[i['query']].add(i['content'])
-
 with jsonlines.open(args.q, 'r') as f:
     for i in f:
-        if i['question_type'] != '事实性问题': continue
-        qd_pair[i['question']] = qd_pair.get(i['question'], set())
-        qd_pair[i['question']].add(i['article'].replace('\n', ''))
+        qd_pair[i['query']] = qd_pair.get(i['query'], set())
+        qd_pair[i['query']].add(i['content'])
 
 with jsonlines.open(args.c, 'r') as f:
     corpus = [i['content'].replace("\n", "").strip() for i in f]
@@ -31,17 +25,6 @@ corpus = list(set(corpus) | set([cor for corpus in qd_pair.values() for cor in c
 
 index.build(corpus)
 index.load()
-
-# import numpy as np
-# lens = []
-# cnt = 0
-# for cor in corpus:
-#     if len(cor) > 512:
-#         cnt += 1
-#     lens.append(len(cor))
-# print(f"len>512 % {cnt / len(lens)}")
-# print(f"average len: {np.mean(lens)}")
-
 
 qs = [q for q, _ in qd_pair.items()]
 cnt, batch = 0, 256
@@ -57,5 +40,5 @@ for q in qs:
     qr = qd_pair[q] 
     cnt = cnt + 1 if qr & set(ca) else cnt
     ws.append( [q, '\n\n'.join(list(qr)), True if qr & set(ca) else False] + ca )
-wb.save("topn.xlsx")
+wb.save(f"top{args.t}.xlsx")
 print(f'recall of top {args.t} is {cnt / len(qs) :.2%}')

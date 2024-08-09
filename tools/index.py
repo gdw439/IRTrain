@@ -194,23 +194,19 @@ if __name__ == '__main__':
     args.add_argument('-q', type=str, required=True, help='query file with answer phase')
     args.add_argument('-c', type=str, required=True, help='corpus file')
     args.add_argument('-t', type=int, required=True, help='topn recall')
+    args.add_argument('-s', type=str, required=True, help='where to save result')
     args = args.parse_args()
 
     # encoder = ModelEmbed(args.m, device='cuda', batch_size=512)
-    encoder = BGEM3(args.m, device='cuda', batch_size=16)
+    encoder = BGEM3(args.m, device='cuda', batch_size=8)
     index = BruteIndex(device='cuda')
 
     qd_pair = {}
     import jsonlines
-    # with jsonlines.open(args.q, 'r') as f:
-    #     for i in f:
-    #         qd_pair[i['query']] = qd_pair.get(i['query'], set())
-    #         qd_pair[i['query']].add(i['content'])
     with jsonlines.open(args.q, 'r') as f:
         for i in f:
-            if i['question_type'] != '事实性问题': continue
-            qd_pair[i['question']] = qd_pair.get(i['question'], set())
-            qd_pair[i['question']].add(i['article'].replace('\n', ''))
+            qd_pair[i['query']] = qd_pair.get(i['query'], set())
+            qd_pair[i['query']].add(i['content'])
 
     with jsonlines.open(args.c, 'r') as f:
         corpus = [i['content'].replace("\n", "").strip() for i in f]
@@ -251,6 +247,6 @@ if __name__ == '__main__':
 
             cnt = cnt + 1 if len(qr & set(topn)) > 0 else cnt
             ws.append( [q, '\n\n'.join(list(qr)), len(qr & set(topn))] + topn)
-    wb.save("topn.xlsx")
+    wb.save(f"{args.s}/top{args.t}.xlsx")
 
     print(f'recall {cnt} / {len(qs)} is {cnt / len(qs) :.2%}')
