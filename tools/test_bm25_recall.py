@@ -29,16 +29,25 @@ index.load()
 qs = [q for q, _ in qd_pair.items()]
 cnt, batch = 0, 256
 
+import time
 import openpyxl
+time_fly = []
 wb = openpyxl.Workbook()
 ws = wb.active
 ws.append(['query', 'content', 'label'] + [f'top{i}' for i in range(5)])
 for q in qs:
+    a = time.perf_counter()
     ans = index.search(q, args.t)
     ca = [a['content'] for a in ans]
+    b = time.perf_counter()
+
+    time_fly.append(b - a)
 
     qr = qd_pair[q] 
     cnt = cnt + 1 if qr & set(ca) else cnt
     ws.append( [q, '\n\n'.join(list(qr)), True if qr & set(ca) else False] + ca )
 wb.save(f"top{args.t}.xlsx")
 print(f'recall of top {args.t} is {cnt / len(qs) :.2%}')
+
+import numpy as np
+print(f"time spend: {np.mean(time_fly)} s")
