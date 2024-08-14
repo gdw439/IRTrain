@@ -1,0 +1,21 @@
+torchrun --nproc_per_node 1 \
+-m FlagEmbedding.baai_general_embedding.finetune.run \
+--output_dir /home/guodewen/research/IRTrain/history/bgem3-0813-b256-l1024 \
+--model_name_or_path /home/guodewen/research/IRTrain/models/bge-m3/ \
+--train_data /home/guodewen/research/IRTrain/dataset/airpline/train_m3-2.jsonl \
+--learning_rate 5e-6 \
+--fp16 \
+--num_train_epochs 3 \
+--per_device_train_batch_size 144 \
+--dataloader_drop_last True \
+--normlized True \
+--temperature 0.02 \
+--query_max_len 64 \
+--passage_max_len 1024 \
+--train_group_size 2 \
+--negatives_cross_device \
+--logging_steps 10 \
+--save_steps  40 \
+--gradient_checkpointing \
+--deepspeed /home/guodewen/research/IRTrain/tools/bgem3/ds_config.json \
+--query_instruction_for_retrieval "" 

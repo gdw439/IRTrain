@@ -32,9 +32,9 @@ class SaveModelCallBack(TrainerCallback):
         self.customized_save_steps = save_steps
         self.customized_output_dir = output_dir
         self.local_rank = local_rank
-
-    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        if self.local_rank == 0 and self.customized_save_steps > 0 and state.global_step > 0 and state.global_step % self.customized_save_steps == 0:
+    
+    def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        if self.local_rank == 0:
             epoch = int(state.epoch)
             save_dir = join(self.customized_output_dir, f"epoch-{epoch}_globalStep-{state.global_step}")
             kwargs["model"].save_pretrained(save_dir, max_shard_size="900000MB")

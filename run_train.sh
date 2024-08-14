@@ -1,0 +1,1 @@
+deepspeed --num_gpus 1 run_train.py 

@@ -60,7 +60,7 @@ class MyTrainer(Trainer):
             vectors = torch.cat(vectors, dim=0)
             vecs1, vecs2 = vectors[:q_num, :], vectors[q_num:, :]
             logits = torch.mm(vecs1, vecs2.t())
-            print("logits.shape", logits.shape)
+            # print("logits.shape", logits.shape)
             LABEL = torch.LongTensor(list(range(q_num))).to(vectors.device)
             in_batch_loss = F.cross_entropy(logits * in_batch_ratio, LABEL)
 
