@@ -6,22 +6,35 @@ export CUDA_VISIBLE_DEVICES=1
 #     -s /home/guodewen/research/IRTrain/result \
 #     -m /home/guodewen/research/IRTrain/history/airpline-0813-filter/epoch-1_globalStep-8
 
-python index.py  \
-    -q /home/guodewen/research/IRTrain/dataset/airpline/test-uniq.jsonl \
-    -c /home/guodewen/research/IRTrain/dataset/airpline/content-uniq.jsonl \
-    -t 5 \
-    -s /home/guodewen/research/IRTrain/result \
-    -m /home/guodewen/research/IRTrain/models/stella-large-zh-v2
-
-
-
 # python index.py  \
-#     -q /home/guodewen/research/IRTrain/dataset/govern/govern-test.jsonl \
-#     -c /home/guodewen/research/IRTrain/dataset/govern/govern-content.jsonl \
+#     -q /home/guodewen/research/IRTrain/dataset/airpline/test-uniq.jsonl \
+#     -c /home/guodewen/research/IRTrain/dataset/airpline/content-uniq.jsonl \
 #     -t 5 \
 #     -s /home/guodewen/research/IRTrain/result \
-#     -m /home/guodewen/research/IRTrain/history/govern-stella-zh-v2/epoch-2_globalStep-38
-#     # -m /home/guodewen/research/IRTrain/history/govern/epoch-1_globalStep-19
+#     -m /home/guodewen/research/IRTrain/models/stella-large-zh-v2
+
+python index.py  \
+    -q /home/guodewen/research/IRTrain/dataset/govern/govern-test.jsonl \
+    -c /home/guodewen/research/IRTrain/dataset/govern/govern-content.jsonl \
+    -t 5 \
+    -s /home/guodewen/research/IRTrain/result \
+    -m /home/guodewen/research/IRTrain/history/govern_train_syndata-vecneg/epoch-1_globalStep-4
+
+
+python index.py  \
+    -q /home/guodewen/research/IRTrain/dataset/govern/govern-test.jsonl \
+    -c /home/guodewen/research/IRTrain/dataset/govern/govern-content.jsonl \
+    -t 5 \
+    -s /home/guodewen/research/IRTrain/result \
+    -m /home/guodewen/research/IRTrain/history/govern_train_syndata-vecneg/epoch-2_globalStep-8
+
+
+python index.py  \
+    -q /home/guodewen/research/IRTrain/dataset/govern/govern-test.jsonl \
+    -c /home/guodewen/research/IRTrain/dataset/govern/govern-content.jsonl \
+    -t 5 \
+    -s /home/guodewen/research/IRTrain/result \
+    -m /home/guodewen/research/IRTrain/history/govern_train_syndata-vecneg/epoch-3_globalStep-12
 
 
 
