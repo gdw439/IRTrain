@@ -13,3 +13,7 @@ result
 tools/bm25_retriever/index
 logs
 *.npz
+run_sbatch.sh
+workspace
+*.sh
+dataset
