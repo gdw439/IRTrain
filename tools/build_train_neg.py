@@ -12,6 +12,7 @@ class ModelEmbed(object):
     def __init__(self, path, device='cuda', batch_size = 256) -> None:
         self.token = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
         self.model = BertModel.from_pretrained(path, trust_remote_code=True, device_map=device)
+        self.model = self.model.half()
         self.device = self.model.device
         self.batch_size = batch_size
 
@@ -135,18 +136,18 @@ if __name__ == '__main__':
     import jsonlines
     with jsonlines.open(args.q, 'r') as f:
         qddata = list(f)
-    cnt, batch = 0, 512
+    cnt, batch = 0, 256
 
     with jsonlines.open(args.s, "w") as f:
         for p in range(0, len(qddata), batch):
             qb2 = qddata[p: p+batch]
-            qb = [q['query'] for q in qb2]
+            qb = [q['txt1'] for q in qb2]
             qb_emb = encoder.emdbed(qb)
-            score, value = index.search(qb_emb, topn=70)
+            score, value = index.search(qb_emb, topn=50)
             for idx, cand in enumerate(value):
                 items = {
-                    "txt1": qb2[idx]["query"],
-                    "txt2": qb2[idx]["content"],
-                    "hard_negs": [it for it in cand[-5:] if it != qb2[idx]["content"]]
+                    "txt1": qb2[idx]["txt1"],
+                    "txt2": qb2[idx]["txt2"],
+                    "hard_negs": [it for it in cand[-5:] if it != qb2[idx]["txt2"]]
                 }
                 f.write(items)
