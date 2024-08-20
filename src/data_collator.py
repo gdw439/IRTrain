@@ -1,10 +1,12 @@
 # coding=utf8
 import collections
 import random
-import torch
 from torch.utils.data import Dataset
 import json
 from loguru import logger
+from os.path import join
+from transformers import TrainingArguments, TrainerCallback, TrainerControl, TrainerState
+
 
 
 class InBatchDataSet(Dataset):
@@ -99,71 +101,6 @@ def in_batch_collate_fn(batch, tokenizer, max_length):
     return [f"in_batch-{data_name}"] + ipts
 
 
-class PairDataSet(Dataset):
-    """ pair对数据集 """
-
-    def __init__(self, data_paths: str, data_name: str, model_name: str, pair_label_map: dict):
-        self.data = []
-        self.data_paths = data_paths
-        self.data_name = data_name
-        self.model_name = model_name
-        self.pair_label_map = pair_label_map
-        self.load_data()
-
-    def load_data(self):
-        for data_path in self.data_paths:
-            with open(data_path, "r", encoding="utf8") as fr:
-                single_data = [json.loads(line) for line in fr]
-                self.data.extend(single_data)
-        self.data = [
-            [item["txt1"], item["txt2"], self.pair_label_map[str(item["label"])]]
-            for item in self.data if str(item["label"]) in self.pair_label_map
-        ]
-        self.data = [[self.data_name] + i for i in self.data]
-        logger.info(f"PairDataSet数据总量：{len(self.data)}")
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, item):
-        """
-        item 为数据索引，迭代取第item条数据
-        """
-        return self.data[item]
-
-
-def pair_collate_fn(batch, tokenizer, max_length):
-    """
-    DataLoader类collate_fn函数。用于pair对数据集处理。
-    :param batch: List[data_set[i]]
-    :param tokenizer:tokenizer处理器
-    :param max_length:最大长度
-    :return:
-    """
-    data_name = batch[0][0]
-    batch = [item[1:] for item in batch]
-    all_texts = [item[0] for item in batch] + [item[1] for item in batch]
-    ipts = []
-    for start in range(0, len(all_texts), 32):
-        ipt = tokenizer.batch_encode_plus(
-            all_texts[start:start + 32], padding="longest", truncation=True, max_length=max_length, return_tensors="pt")
-        # print("pair_collate_fn", ipt["input_ids"].shape)
-        ipts.append(ipt)
-
-    labels = [item[2] for item in batch]
-    neg_pos_idxs = [[0.0] * len(batch) for _ in range(len(batch))]
-    for i in range(len(batch)):
-        for j in range(len(batch)):
-            # 1,4: 相似
-            # 0 2 3 不相似，其中3是中立，2是完全相反
-            if labels[i] in [0, 2, 3] and labels[j] in [1, 4]:
-                neg_pos_idxs[i][j] = 1.0
-            elif labels[i] == 2 and labels[j] == 3:
-                neg_pos_idxs[i][j] = 1.0
-
-    return [f"pair-{data_name}"] + ipts + [torch.tensor(neg_pos_idxs), len(batch)]
-
-
 def comb_data_loader(loaders, idx_list=None):
     if idx_list is None:
         idx_list = list(range(len(loaders)))
@@ -185,9 +122,9 @@ def comb_data_loader(loaders, idx_list=None):
 class VecDataSet(Dataset):
     """ pair 对数据集 """
 
-    def __init__(self, data_loaders, loader_idxs):
+    def __init__(self, data_loaders):
         self.lens = sum([len(i) for i in data_loaders])
-        self.data = comb_data_loader(data_loaders, idx_list=loader_idxs)
+        self.data = comb_data_loader(data_loaders)
 
     def __len__(self):
         return self.lens
@@ -197,3 +134,17 @@ class VecDataSet(Dataset):
         item 为数据索引，迭代取第item条数据
         """
         return next(self.data)
+
+
+class SaveModelCallBack(TrainerCallback):
+    def __init__(self, output_dir, local_rank):
+        self.customized_output_dir = output_dir
+        self.local_rank = local_rank
+    
+    def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        if self.local_rank == 0:
+            epoch = int(state.epoch)
+            save_dir = join(self.customized_output_dir, f"epoch-{epoch}_globalStep-{state.global_step}")
+            kwargs["model"].save_pretrained(save_dir, max_shard_size="900000MB")
+            kwargs["tokenizer"].save_pretrained(save_dir)
+            kwargs["tokenizer"].save_vocabulary(save_dir)

@@ -209,7 +209,7 @@ if __name__ == '__main__':
         for i in f:
             qs.append(i['query'])
             qd_pair[i['query']] = qd_pair.get(i['query'], set())
-            qd_pair[i['query']].add(i['content'])
+            qd_pair[i['query']].add(i['content'].replace("\n", "").strip())
 
     with jsonlines.open(args.c, 'r') as f:
         corpus = [i['content'].replace("\n", "").strip() for i in f]
@@ -217,9 +217,11 @@ if __name__ == '__main__':
         corpus = list(OrderedDict.fromkeys(corpus))
 
     # 确保召回的文档确实在index中
-    corpus = list(set(corpus) | set([cor for corpus in qd_pair.values() for cor in corpus]))
+    # corpus = list(set(corpus) | set([cor for corpus in qd_pair.values() for cor in corpus]))
 
-    span, tabs = chunks(corpus)
+    # span, tabs = chunks(corpus)
+    corpus = [item.strip() for item in corpus]
+    span = list(OrderedDict.fromkeys(corpus))
     corpus_emb = encoder.emdbed(span)
     print("corpus_emb.shape: ", corpus_emb.shape)
     index.insert(span, corpus_emb)
@@ -227,6 +229,9 @@ if __name__ == '__main__':
     # qs = [q for q, _ in qd_pair.items()]
     cnt, batch = 0, 512
 
+    import codecs
+
+    hh = codecs.open("temp1.txt", "w", encoding="utf8")
     import openpyxl
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -236,19 +241,28 @@ if __name__ == '__main__':
         if len(qb) == 0: continue
         qb_emb = encoder.emdbed(qb)
         score, value = index.search(qb_emb, topn=args.t)
-        
+        # print(score)
+        # import pdb
+        # pdb.set_trace()
+
         for q, sc, ca in zip(qb, score, value):
             qr = qd_pair[q]
 
-            corpus_2_score = {}
-            for s, c in zip(sc, ca):
-                for cid in tabs[c]:
-                    corpus_2_score[corpus[cid]] = max(corpus_2_score.get(corpus[cid], 0), s)
-            topn = sorted(list(corpus_2_score.items()), key=lambda x:x[1])
-            topn = [i[0] for i in topn[-args.t:]] 
+            # # corpus_2_score = {}
+            # for s, c in zip(sc, ca):
+            #     for cid in tabs[c]:
+            #         corpus_2_score[corpus[cid]] = max(corpus_2_score.get(corpus[cid], 0), s)
+            # topn = sorted(list(corpus_2_score.items()), key=lambda x:x[1])
+            # topn = [i[0] for i in topn[-args.t:]] 
+            # score = [i[1] for i in topn[-args.t:]] 
+            # # print(score)
 
-            cnt = cnt + 1 if len(qr & set(topn)) > 0 else cnt
-            ws.append( [q, '\n\n'.join(list(qr)), len(qr & set(topn))] + topn)
+            cnt = cnt + 1 if len(qr & set(ca)) > 0 else cnt
+            # ws.append( [q, '\n\n'.join(list(qr)), len(qr & set(ca))] + topn)
+            for t, s in zip(ca, sc):
+                t = t.replace("\n", "")
+                hh.write(f"{len(qr & set(ca)) > 0}\t{q}\t{t}\t{s}\n")
     wb.save(f"{args.s}/top{args.t}.xlsx")
 
     print(f'recall {cnt} / {len(qs)} is {cnt / len(qs) :.2%}')
+    hh.close()
