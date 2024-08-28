@@ -9,8 +9,8 @@ class ModelEmbed(object):
     ''' 使用模型将文本表征为向量
     '''
     def __init__(self, path, device='cuda', batch_size = 256) -> None:
-        self.token = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
-        self.model = BertModel.from_pretrained(path, trust_remote_code=True, device_map=device)
+        self.token = AutoTokenizer.from_pretrained(path)
+        self.model = BertModel.from_pretrained(path, device_map=device)
         self.model = self.model.half()
         self.device = self.model.device
         self.batch_size = batch_size
@@ -258,7 +258,7 @@ if __name__ == '__main__':
             # # print(score)
 
             cnt = cnt + 1 if len(qr & set(ca)) > 0 else cnt
-            # ws.append( [q, '\n\n'.join(list(qr)), len(qr & set(ca))] + topn)
+            ws.append( [q, '\n\n'.join(list(qr)), len(qr & set(ca))] + ca)
             for t, s in zip(ca, sc):
                 t = t.replace("\n", "")
                 hh.write(f"{q}\t{t}\t{s}\n")

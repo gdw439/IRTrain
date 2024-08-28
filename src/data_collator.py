@@ -21,20 +21,6 @@ class InBatchDataSet(Dataset):
                 single_data = [json.loads(line) for line in fr][:]
                 self.data.extend(single_data)
         self.data = [[item["txt1"], item["txt2"], item.get("hard_negs", [])] for item in self.data]
-        if self.model_name in ["bge", "piccolo"]:
-            logger.info(f"检测到是{self.model_name}模型，对于q-p数据前面添加特定的instruction")
-            num_added = 0
-            # query前面加东西
-            for item in self.data:
-                txt1, txt2 = item[:2]
-                if len(txt1) < 32 and len(txt2) > 64:
-                    num_added += 1
-                    if self.model_name == "piccolo":
-                        item[0] = f"查询: {txt1}"
-                        item[1] = f"结果: {txt2}"
-                    else:
-                        item[0] = f"为这个句子生成表示以用于检索相关文章：{txt1}"
-            logger.info(f"数据总量：{len(self.data)}，添加特定指示的数据量：{num_added}")
         self.data = [[self.data_name] + i for i in self.data]
 
     def __len__(self):

@@ -17,3 +17,6 @@ run_sbatch.sh
 workspace
 *.sh
 dataset
+conf.yml
+*.txt
+*.json

@@ -1,17 +1,19 @@
 import os
 import torch
-import jsonlines
 import numpy as np
 from typing import List
 from transformers import AutoTokenizer, BertModel
-from simhash import Simhash
+import json
+import codecs
+import openpyxl
+from functools import reduce
 
 class ModelEmbed(object):
     ''' 使用模型将文本表征为向量
     '''
     def __init__(self, path, device='cuda', batch_size = 256) -> None:
-        self.token = AutoTokenizer.from_pretrained(path, trust_remote_code=True)
-        self.model = BertModel.from_pretrained(path, trust_remote_code=True, device_map=device)
+        self.token = AutoTokenizer.from_pretrained(path)
+        self.model = BertModel.from_pretrained(path, device_map=device)
         self.model = self.model.half()
         self.device = self.model.device
         self.batch_size = batch_size
@@ -55,18 +57,10 @@ class BruteIndex(object):
         if isinstance(self.index, torch.Tensor) :
             self.index = self.index 
         else:
-            # for item in self.index:
-            #     item = item.to('cpu')
-            self.index = self.index[0]
-            print(self.index.shape)
-            
-            # torch.vstack(self.index)
+            self.index = torch.vstack(self.index)
 
         embed.to(self.device)
         self.index.to(self.device)
-
-        # print(self.index.shape)
-        # print(len(self.text))
         assert self.index.shape[0] == len(self.text), "length not same"
 
         score_buff = []
@@ -110,44 +104,94 @@ class BruteIndex(object):
         self.text = np.load(text_file).tolist()
         self.index = torch.load(index_file)
 
-
 if __name__ == '__main__':
     import argparse
     args = argparse.ArgumentParser()
     args.add_argument('-m', type=str, required=True, help='model path')
     args.add_argument('-q', type=str, required=True, help='query file with answer phase')
     args.add_argument('-c', type=str, required=True, help='corpus file')
+    args.add_argument('-t', type=int, required=True, help='topn recall')
     args.add_argument('-s', type=str, required=True, help='where to save result')
     args = args.parse_args()
 
     encoder = ModelEmbed(args.m, device='cuda', batch_size=512)
     index = BruteIndex(device='cuda')
 
-    with jsonlines.open(args.c, 'r') as f:
-        corpus = [i['content'] for i in f]
-        from collections import OrderedDict
-        corpus = list(OrderedDict.fromkeys(corpus))
+    qd_pair = {}
+    qs = []
+    import jsonlines
+    with jsonlines.open(args.q, 'r') as f:
+        for i in f:
+            qs.append(i['query'])
+            qd_pair[i['query']] = qd_pair.get(i['query'], [])
+            qd_pair[i['query']].append(i['content'])
 
+    contents = []
+    slice2content = {}
+    with jsonlines.open(args.c, 'r') as f:
+        slice_list = list(f)
+        for idx, item in enumerate(slice_list):
+            content = item['content']
+            slices = item['slices']
+            
+            # 切片太短说明有问题，解析出来非json也有问题，这种情况下就不切分
+            if not isinstance(slices, list) or min([len(item) for item in slices]) < 32:
+                if content in slice2content:
+                    slice2content[content].append(content)
+                else :
+                    slice2content[content] = [content]
+                contents.append(content)
+                continue
+
+            contents.extend(slices)
+            for sli in slices:
+                if sli in slice2content:
+                    slice2content[sli].append(content)
+                else:
+                    slice2content[sli] = [content]
+
+    from collections import OrderedDict
+    corpus = list(OrderedDict.fromkeys(contents))
     corpus_emb = encoder.emdbed(corpus)
     print("corpus_emb.shape: ", corpus_emb.shape)
     index.insert(corpus, corpus_emb)
 
-  
-    import jsonlines
-    with jsonlines.open(args.q, 'r') as f:
-        qddata = list(f)
-    cnt, batch = 0, 256
+    cnt, batch = 0, 512
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(['query', 'content', 'label'] + [f'top{i}' for i in range(args.t)])
+    for p in range(0, len(qs), batch):
+        querys = qs[p: p+batch]
+        if len(querys) == 0: continue
+        qb_emb = encoder.emdbed(querys)
+        scores, values = index.search(qb_emb, topn=6477)
+        
+        for query, score_t, recall_t in zip(querys, scores, values):
+            ground_truth_contents = qd_pair[query]
+            contents = {}
+            for idx, (score, item) in enumerate(zip(score_t, recall_t)):
+                content_set = slice2content[item]
+                for content in content_set:
+                    if content in contents:
+                        contents[content] = max(score, contents[content])
+                        # contents[content] += 1 / (61 + idx)
+                    else:
+                        contents[content] = score
+                        # contents[content] = 1 / (61 + idx)
+            contents = [(key, val) for key, val in contents.items()]
+            contents = sorted(contents, key= lambda x: x[1])
+            recall_map2_contents = [item[0] for item in contents[-args.t:]]
+            # recall_map2_contents = set(recall_map2_contents)
+            # recall_map2_contents = reduce(set.union, [slice2content[item] for item in recall_t])
 
-    with jsonlines.open(args.s, "w") as f:
-        for p in range(0, len(qddata), batch):
-            qb2 = qddata[p: p+batch]
-            qb = [q['query'] for q in qb2]
-            qb_emb = encoder.emdbed(qb)
-            score, value = index.search(qb_emb, topn=30)
-            for idx, cand in enumerate(value):
-                items = {
-                    "txt1": qb2[idx]["query"],
-                    "txt2": qb2[idx]["content"],
-                    "hard_negs": [it for it in cand[-5:] if Simhash(it).distance(Simhash(qb2[idx]["content"])) > 3]
-                }
-                f.write(items)
+            label = False
+            for a in ground_truth_contents:
+                for b in recall_map2_contents:
+                    if a == b:
+                        label = True
+            # label = len(ground_truth_contents & recall_map2_contents) > 0
+            cnt = cnt + 1 if label else cnt
+            ws.append( [query, '\n\n'.join(list(ground_truth_contents)), label] + list(recall_map2_contents))
+    wb.save(f"{args.s}/top-chunk{args.t}.xlsx")
+
+    print(f'recall {cnt} / {len(qs)} is {cnt / len(qs) :.2%}')
