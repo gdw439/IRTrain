@@ -76,7 +76,7 @@ class BruteIndex(object):
             # for item in self.index:
             #     item = item.to('cpu')
             self.index = self.index[0]
-            print(self.index.shape)
+            # print(self.index.shape)
             
             # torch.vstack(self.index)
 
@@ -223,7 +223,7 @@ if __name__ == '__main__':
     corpus = [item.strip() for item in corpus]
     span = list(OrderedDict.fromkeys(corpus))
     corpus_emb = encoder.emdbed(span)
-    print("corpus_emb.shape: ", corpus_emb.shape)
+    # print("corpus_emb.shape: ", corpus_emb.shape)
     index.insert(span, corpus_emb)
 
     # qs = [q for q, _ in qd_pair.items()]
@@ -264,5 +264,5 @@ if __name__ == '__main__':
                 hh.write(f"{q}\t{t}\t{s}\n")
     wb.save(f"{args.s}/top{args.t}.xlsx")
 
-    print(f'recall {cnt} / {len(qs)} is {cnt / len(qs) :.2%}')
+    print(f'recall top{args.t} {cnt} / {len(qs)} is {cnt / len(qs) :.2%}')
     hh.close()

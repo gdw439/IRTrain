@@ -6,6 +6,7 @@ from transformers import AutoTokenizer, BertModel
 import json
 import codecs
 import openpyxl
+import jsonlines
 from functools import reduce
 
 class ModelEmbed(object):
@@ -112,14 +113,21 @@ if __name__ == '__main__':
     args.add_argument('-c', type=str, required=True, help='corpus file')
     args.add_argument('-t', type=int, required=True, help='topn recall')
     args.add_argument('-s', type=str, required=True, help='where to save result')
+    args.add_argument('-title', type=str, default=None, required=False, help="if exists, will add title for each chunk head")
     args = args.parse_args()
 
-    encoder = ModelEmbed(args.m, device='cuda', batch_size=512)
+    encoder = ModelEmbed(args.m, device='cuda', batch_size=256)
     index = BruteIndex(device='cuda')
+
+    if args.title != None:
+        with jsonlines.open(args.title) as fr:
+            titile_data = list(fr)
+
+        titile_map = {item["content"]: item["title"] for item in titile_data}
 
     qd_pair = {}
     qs = []
-    import jsonlines
+
     with jsonlines.open(args.q, 'r') as f:
         for i in f:
             qs.append(i['query'])
@@ -133,6 +141,12 @@ if __name__ == '__main__':
         for idx, item in enumerate(slice_list):
             content = item['content']
             slices = item['slices']
+
+            # 如果存在标题，为每个chunk添加标题
+            if args.title != None and content in titile_map:
+                title = titile_map[content]
+                slices = [title + ": " + sli for sli in slices]
+
             
             # 切片太短说明有问题，解析出来非json也有问题，这种情况下就不切分
             if not isinstance(slices, list) or min([len(item) for item in slices]) < 32:
@@ -153,7 +167,6 @@ if __name__ == '__main__':
     from collections import OrderedDict
     corpus = list(OrderedDict.fromkeys(contents))
     corpus_emb = encoder.emdbed(corpus)
-    print("corpus_emb.shape: ", corpus_emb.shape)
     index.insert(corpus, corpus_emb)
 
     cnt, batch = 0, 512
@@ -174,24 +187,19 @@ if __name__ == '__main__':
                 for content in content_set:
                     if content in contents:
                         contents[content] = max(score, contents[content])
-                        # contents[content] += 1 / (61 + idx)
                     else:
                         contents[content] = score
-                        # contents[content] = 1 / (61 + idx)
             contents = [(key, val) for key, val in contents.items()]
             contents = sorted(contents, key= lambda x: x[1])
             recall_map2_contents = [item[0] for item in contents[-args.t:]]
-            # recall_map2_contents = set(recall_map2_contents)
-            # recall_map2_contents = reduce(set.union, [slice2content[item] for item in recall_t])
 
             label = False
             for a in ground_truth_contents:
                 for b in recall_map2_contents:
                     if a == b:
                         label = True
-            # label = len(ground_truth_contents & recall_map2_contents) > 0
             cnt = cnt + 1 if label else cnt
             ws.append( [query, '\n\n'.join(list(ground_truth_contents)), label] + list(recall_map2_contents))
     wb.save(f"{args.s}/top-chunk{args.t}.xlsx")
 
-    print(f'recall {cnt} / {len(qs)} is {cnt / len(qs) :.2%}')
+    print(f'recall top{args.t} {cnt} / {len(qs)} is {cnt / len(qs) :.2%}')
